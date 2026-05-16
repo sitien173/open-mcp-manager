@@ -1,0 +1,16 @@
+{
+  "include": [
+    "src/**",
+    "src-tauri/src/**",
+    "docs/**"
+  ],
+  "exclude": [
+    "node_modules/**",
+    "dist/**",
+    "target/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src-tauri/tests/**"
+  ],
+  "chunkStrategy": "ast"
+}

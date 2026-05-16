@@ -1,0 +1,52 @@
+{
+  "deny": [
+    {
+      "name": "components-never-import-stores-directly-from-other-views",
+      "from": "src/components/marketplace/**",
+      "to": "src/components/cloud-sync/**",
+      "reason": "View components must not cross-import other view components — compose in App.tsx instead"
+    },
+    {
+      "name": "stores-never-import-components",
+      "from": "src/stores/**",
+      "to": "src/components/**",
+      "reason": "Stores are data layer — must not depend on UI components"
+    },
+    {
+      "name": "types-never-import-stores",
+      "from": "src/types/**",
+      "to": "src/stores/**",
+      "reason": "Type definitions must remain pure — no runtime dependencies"
+    },
+    {
+      "name": "types-never-import-components",
+      "from": "src/types/**",
+      "to": "src/components/**",
+      "reason": "Type definitions must remain pure — no UI dependencies"
+    },
+    {
+      "name": "styles-never-import-components",
+      "from": "src/styles/**",
+      "to": "src/components/**",
+      "reason": "Style tokens are leaf nodes — no reverse dependencies"
+    },
+    {
+      "name": "ui-primitives-never-import-views",
+      "from": "src/components/ui/**",
+      "to": "src/components/marketplace/**",
+      "reason": "Shared UI primitives must not depend on specific view components"
+    },
+    {
+      "name": "ui-primitives-never-import-installed",
+      "from": "src/components/ui/**",
+      "to": "src/components/installed/**",
+      "reason": "Shared UI primitives must not depend on specific view components"
+    },
+    {
+      "name": "ui-primitives-never-import-stores",
+      "from": "src/components/ui/**",
+      "to": "src/stores/**",
+      "reason": "UI primitives should be stateless — pass data via props, not store access"
+    }
+  ]
+}

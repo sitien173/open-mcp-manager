@@ -1,0 +1,69 @@
+:root {
+  /* Brand & Accent */
+  --color-primary:          #5e6ad2;
+  --color-primary-hover:    #828fff;
+  --color-primary-focus:    #5e69d1;
+  --color-brand-secure:     #7a7fad;
+  --color-on-primary:       #ffffff;
+
+  /* Surface Ladder */
+  --color-canvas:           #010102;
+  --color-surface-1:        #16181d;
+  --color-surface-2:        #1e2028;
+  --color-surface-3:        #26282f;
+  --color-surface-4:        #2e3038;
+
+  /* Borders */
+  --color-hairline:         #23252a;
+  --color-hairline-strong:  #35373e;
+  --color-hairline-tertiary:#2a2c33;
+
+  /* Text / Ink */
+  --color-ink:              #f7f8f8;
+  --color-ink-muted:        #d0d6e0;
+  --color-ink-subtle:       #8a8f98;
+  --color-ink-tertiary:     #62666d;
+
+  /* Inverse (light) */
+  --color-inverse-canvas:     #ffffff;
+  --color-inverse-surface-1:  #f5f5f5;
+  --color-inverse-surface-2:  #ebebeb;
+  --color-inverse-ink:        #010102;
+
+  /* Semantic */
+  --color-semantic-success: #27a644;
+  --color-semantic-overlay: rgba(0, 0, 0, 0.5);
+
+  /* In-product label colors */
+  --color-label-red:        #eb5757;
+  --color-label-orange:     #f2994a;
+  --color-label-yellow:     #f2c94c;
+  --color-label-green:      #27ae60;
+  --color-label-blue:       #2f80ed;
+  --color-label-purple:     #9b51e0;
+
+  /* Spacing */
+  --space-xxs:    4px;
+  --space-xs:     8px;
+  --space-sm:     12px;
+  --space-md:     16px;
+  --space-lg:     24px;
+  --space-xl:     32px;
+  --space-xxl:    48px;
+  --space-section:96px;
+
+  /* Border Radius */
+  --rounded-xs:   4px;
+  --rounded-sm:   6px;
+  --rounded-md:   8px;
+  --rounded-lg:   12px;
+  --rounded-xl:   16px;
+  --rounded-xxl:  24px;
+  --rounded-pill: 9999px;
+  --rounded-full: 9999px;
+
+  /* Font Families */
+  --font-display: 'SF Pro Display', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-text:    'SF Pro Text', 'SF Pro Display', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}

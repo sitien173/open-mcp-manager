@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+.DS_Store
+*.exe
+*.msi
+.vectors/
+.tmp/
+.stellarisrc
+*.zip
+CONOUT$

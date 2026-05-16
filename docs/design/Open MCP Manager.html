@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open MCP Manager</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body { background: var(--color-canvas); }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-surface-3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-surface-4); }
+
+  input::placeholder { color: var(--color-ink-tertiary); }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes toastIn {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes modalIn {
+    from { transform: translateY(8px) scale(0.98); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="app-data.jsx"></script>
+<script type="text/babel" src="app-sidebar.jsx"></script>
+<script type="text/babel" src="app-marketplace.jsx"></script>
+<script type="text/babel" src="app-manage.jsx"></script>
+<script type="text/babel" src="app-detail.jsx"></script>
+<script type="text/babel" src="app-secondary.jsx"></script>
+<script type="text/babel" src="app-cloud-sync.jsx"></script>
+<script type="text/babel" src="app-modals.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel">
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#27ae60",
+  "sidebarWidth": 220,
+  "cardStyle": "compact"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [view, setView] = React.useState('marketplace');
+  const [selectedServer, setSelectedServer] = React.useState(null);
+  const [installed, setInstalled] = React.useState(INSTALLED_INITIAL);
+  const [clients, setClients] = React.useState(AI_CLIENTS_INITIAL);
+  const [profiles, setProfiles] = React.useState(PROFILES_INITIAL);
+  const [search, setSearch] = React.useState('');
+  const [category, setCategory] = React.useState('all');
+  const [toasts, setToasts] = React.useState([]);
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [showAddClient, setShowAddClient] = React.useState(false);
+  const [configViewerClient, setConfigViewerClient] = React.useState(null);
+  const [syncSourceClient, setSyncSourceClient] = React.useState(null);
+  const [showCommandPalette, setShowCommandPalette] = React.useState(false);
+
+  // Re-init Lucide icons after every render
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }, 30);
+    return () => clearTimeout(t);
+  });
+
+  // Global keyboard shortcuts
+  React.useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // ── Toast helper ──
+  const addToast = (message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  };
+  const dismissToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
+
+  // ── Installed IDs set ──
+  const installedIds = React.useMemo(() => new Set(installed.map(i => i.serverId)), [installed]);
+
+  // ── Handlers ──
+  const handleInstall = (serverId, clientIds) => {
+    const server = MCP_SERVERS.find(s => s.id === serverId);
+    if (!server) return;
+
+    setInstalled(prev => {
+      const existing = prev.find(i => i.serverId === serverId);
+      if (existing) {
+        return prev.map(i => i.serverId === serverId ? { ...i, clientIds } : i);
+      }
+      return [...prev, { serverId, enabled: true, version: server.version, clientIds }];
+    });
+
+    // Update client server lists
+    setClients(prev => prev.map(cl => ({
+      ...cl,
+      servers: clientIds.includes(cl.id)
+        ? [...new Set([...cl.servers, serverId])]
+        : cl.servers.filter(s => s !== serverId),
+    })));
+
+    setSelectedServer(null);
+    addToast(`Installed ${server.name} to ${clientIds.length} client${clientIds.length !== 1 ? 's' : ''}`);
+  };
+
+  const handleUninstall = (serverId) => {
+    const server = MCP_SERVERS.find(s => s.id === serverId);
+    setInstalled(prev => prev.filter(i => i.serverId !== serverId));
+    setClients(prev => prev.map(cl => ({
+      ...cl, servers: cl.servers.filter(s => s !== serverId),
+    })));
+    addToast(`Uninstalled ${server?.name || serverId}`, 'info');
+  };
+
+  const handleToggle = (serverId) => {
+    setInstalled(prev => prev.map(i =>
+      i.serverId === serverId ? { ...i, enabled: !i.enabled } : i
+    ));
+    const entry = installed.find(i => i.serverId === serverId);
+    const server = MCP_SERVERS.find(s => s.id === serverId);
+    addToast(`${server?.name} ${entry?.enabled ? 'disabled' : 'enabled'}`, 'info');
+  };
+
+  const handleToggleClientServer = (clientId, serverId) => {
+    setInstalled(prev => prev.map(i => {
+      if (i.serverId !== serverId) return i;
+      const has = i.clientIds.includes(clientId);
+      return { ...i, clientIds: has ? i.clientIds.filter(c => c !== clientId) : [...i.clientIds, clientId] };
+    }));
+    setClients(prev => prev.map(cl => {
+      if (cl.id !== clientId) return cl;
+      const has = cl.servers.includes(serverId);
+      return { ...cl, servers: has ? cl.servers.filter(s => s !== serverId) : [...cl.servers, serverId] };
+    }));
+  };
+
+  const handleSyncFrom = (clientId) => {
+    const cl = clients.find(c => c.id === clientId);
+    if (cl) setSyncSourceClient(cl);
+  };
+
+  const handleSyncExecute = (sourceId, targetIds) => {
+    const source = clients.find(c => c.id === sourceId);
+    // Copy source's servers to all targets
+    const sourceServers = installed.filter(i => i.clientIds.includes(sourceId) && i.enabled);
+    setInstalled(prev => prev.map(entry => {
+      if (!sourceServers.some(s => s.serverId === entry.serverId)) return entry;
+      return { ...entry, clientIds: [...new Set([...entry.clientIds, ...targetIds])] };
+    }));
+    addToast(`Synced ${sourceServers.length} server${sourceServers.length !== 1 ? 's' : ''} from ${source?.name} to ${targetIds.length} client${targetIds.length !== 1 ? 's' : ''}`);
+  };
+
+  const handleAddClient = (newClient) => {
+    setClients(prev => [...prev, newClient]);
+    addToast(`Added ${newClient.name}`);
+  };
+
+  const handleSaveProfile = () => {
+    const id = 'p' + Date.now();
+    setProfiles(prev => [...prev, {
+      id, name: `Profile ${prev.length + 1}`,
+      serverCount: installed.length,
+      clientCount: clients.filter(c => c.servers.length > 0).length,
+      createdAt: new Date().toISOString().slice(0, 10),
+      description: 'Snapshot of current configuration',
+    }]);
+    addToast('Profile saved');
+  };
+
+  const handleDeleteProfile = (pid) => {
+    setProfiles(prev => prev.filter(p => p.id !== pid));
+    addToast('Profile deleted', 'info');
+  };
+
+  const handleExportProfile = () => addToast('Profile exported to file', 'info');
+  const handleApplyProfile = (pid) => {
+    const p = profiles.find(pr => pr.id === pid);
+    addToast(`Applied profile "${p?.name}"`, 'success');
+  };
+  const handleImportProfile = () => addToast('Import dialog would open here', 'info');
+
+  // Wire up Settings → Cloud Sync navigation
+  React.useEffect(() => {
+    window.__navigateToCloudSync = () => setView('cloud-sync');
+    return () => { delete window.__navigateToCloudSync; };
+  }, []);
+
+  // ── Accent color override ──
+  const accentOverride = tweaks.accentColor !== '#5e6ad2' ? {
+    '--color-primary': tweaks.accentColor,
+    '--color-primary-hover': tweaks.accentColor + 'cc',
+    '--color-primary-focus': tweaks.accentColor + 'dd',
+  } : {};
+
+  return (
+    <div style={{
+      display: 'flex', width: '100%', height: '100%',
+      fontFamily: 'var(--font-text)',
+      ...accentOverride,
+    }}>
+      <AppSidebar
+        view={view}
+        onNavigate={setView}
+        installedCount={installed.filter(i => i.enabled).length}
+        clientCount={clients.filter(c => c.detected).length}
+      />
+
+      {view === 'marketplace' && (
+        <MarketplaceView
+          search={search} onSearchChange={setSearch}
+          category={category} onCategoryChange={setCategory}
+          installedIds={installedIds}
+          onSelectServer={setSelectedServer}
+          cardStyle={tweaks.cardStyle}
+        />
+      )}
+      {view === 'installed' && (
+        <InstalledView
+          installed={installed}
+          clients={clients}
+          onToggle={handleToggle}
+          onSelectServer={setSelectedServer}
+          onRemove={handleUninstall}
+        />
+      )}
+      {view === 'clients' && (
+        <ClientsView
+          clients={clients}
+          installed={installed}
+          onToggleClientServer={handleToggleClientServer}
+          onSyncFrom={handleSyncFrom}
+          onAddClient={() => setShowAddClient(true)}
+          onViewConfig={setConfigViewerClient}
+        />
+      )}
+      {view === 'profiles' && (
+        <ProfilesView
+          profiles={profiles}
+          onSaveProfile={handleSaveProfile}
+          onExport={handleExportProfile}
+          onApply={handleApplyProfile}
+          onImport={handleImportProfile}
+          onDelete={handleDeleteProfile}
+        />
+      )}
+      {view === 'cloud-sync' && <CloudSyncView addToast={addToast} />}
+      {view === 'settings' && <SettingsView />}
+
+      {selectedServer && (
+        <DetailPanel
+          server={selectedServer}
+          isInstalled={installedIds.has(selectedServer.id)}
+          installedEntry={installed.find(i => i.serverId === selectedServer.id)}
+          clients={clients}
+          onClose={() => setSelectedServer(null)}
+          onInstall={handleInstall}
+          onUninstall={handleUninstall}
+        />
+      )}
+
+      {/* Modals */}
+      {showAddClient && (
+        <AddClientModal
+          onClose={() => setShowAddClient(false)}
+          onAdd={handleAddClient}
+        />
+      )}
+      {configViewerClient && (
+        <ConfigViewerModal
+          client={configViewerClient}
+          installed={installed}
+          onClose={() => setConfigViewerClient(null)}
+        />
+      )}
+      {syncSourceClient && (
+        <SyncDialog
+          sourceClient={syncSourceClient}
+          clients={clients}
+          onClose={() => setSyncSourceClient(null)}
+          onSync={handleSyncExecute}
+        />
+      )}
+      {showCommandPalette && (
+        <CommandPalette
+          onClose={() => setShowCommandPalette(false)}
+          onNavigate={(v) => setView(v)}
+          onSelectServer={setSelectedServer}
+          installed={installed}
+        />
+      )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Appearance">
+          <TweakColor
+            label="Accent color"
+            value={tweaks.accentColor}
+            onChange={v => setTweak('accentColor', v)}
+            options={['#5e6ad2', '#2f80ed', '#27ae60', '#eb5757', '#f2994a', '#9b51e0']}
+          />
+          <TweakRadio
+            label="Card style"
+            value={tweaks.cardStyle}
+            onChange={v => setTweak('cardStyle', v)}
+            options={['default', 'compact']}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
