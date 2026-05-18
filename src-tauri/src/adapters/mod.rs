@@ -10,7 +10,9 @@ pub mod vscode_copilot;
 pub mod copilot_cli;
 pub mod codex_cli;
 pub mod mcphub;
+pub mod gemini_cli;
 pub mod custom;
+pub mod disabled_store;
 
 use std::path::PathBuf;
 
@@ -38,15 +40,16 @@ impl ClientManager {
     pub fn new() -> Self {
         Self {
             adapters: vec![
-                Box::new(claude_desktop::ClaudeDesktopAdapter),
+                Box::new(codex_cli::CodexCliAdapter),
                 Box::new(claude_code::ClaudeCodeAdapter),
+                Box::new(gemini_cli::GeminiCliAdapter),
+                Box::new(claude_desktop::ClaudeDesktopAdapter),
                 Box::new(cursor::CursorAdapter),
                 Box::new(windsurf::WindsurfAdapter),
                 Box::new(cline::ClineAdapter),
                 Box::new(roo_code::RooCodeAdapter),
                 Box::new(vscode_copilot::VsCodeCopilotAdapter),
                 Box::new(copilot_cli::CopilotCliAdapter),
-                Box::new(codex_cli::CodexCliAdapter),
                 Box::new(mcphub::McpHubAdapter),
                 Box::new(custom::CustomAdapter::default()),
             ],
@@ -57,12 +60,19 @@ impl ClientManager {
         let mut out = Vec::new();
         for adapter in &self.adapters {
             if let Some(info) = adapter.detect() {
-                let servers = info
+                let mut servers = info
                     .active_path
                     .as_ref()
                     .map(PathBuf::from)
                     .and_then(|p| adapter.read_servers(&p).ok())
                     .unwrap_or_default();
+                if !adapter.supports_disabled_field() {
+                    let mut disabled = disabled_store::get_disabled(&info.id);
+                    for s in &mut disabled {
+                        s.enabled = false;
+                    }
+                    servers.extend(disabled);
+                }
                 out.push(DetectedClient { info, servers });
             }
         }
@@ -109,6 +119,9 @@ impl ClientManager {
                 let mut servers = adapter.read_servers(&p).map_err(|e| e.to_string())?;
                 servers.retain(|s| s.name != server_name);
                 adapter.write_servers(&p, &servers).map_err(|e| e.to_string())?;
+                if !adapter.supports_disabled_field() {
+                    let _ = disabled_store::remove_disabled(&info.id, server_name);
+                }
             }
         }
         Ok(())
@@ -130,12 +143,28 @@ impl ClientManager {
                     .ok_or_else(|| "client path missing".to_string())?;
                 let p = PathBuf::from(path);
                 let mut servers = adapter.read_servers(&p).map_err(|e| e.to_string())?;
-                for s in &mut servers {
-                    if s.name == server_name {
-                        s.enabled = enabled;
+
+                if adapter.supports_disabled_field() {
+                    for s in &mut servers {
+                        if s.name == server_name {
+                            s.enabled = enabled;
+                        }
+                    }
+                    adapter.write_servers(&p, &servers).map_err(|e| e.to_string())?;
+                } else if enabled {
+                    if let Some(mut restored) = disabled_store::remove_disabled(&info.id, server_name).map_err(|e| e.to_string())? {
+                        restored.enabled = true;
+                        servers.retain(|s| s.name != server_name);
+                        servers.push(restored);
+                        adapter.write_servers(&p, &servers).map_err(|e| e.to_string())?;
+                    }
+                } else {
+                    if let Some(server) = servers.iter().find(|s| s.name == server_name).cloned() {
+                        disabled_store::save_disabled(&info.id, &server).map_err(|e| e.to_string())?;
+                        servers.retain(|s| s.name != server_name);
+                        adapter.write_servers(&p, &servers).map_err(|e| e.to_string())?;
                     }
                 }
-                adapter.write_servers(&p, &servers).map_err(|e| e.to_string())?;
             }
         }
         Ok(())
@@ -145,6 +174,7 @@ impl ClientManager {
         &self,
         source_id: &str,
         target_ids: &[String],
+        server_names: Option<&[String]>,
     ) -> Result<(), String> {
         let mut source_servers = None;
         for adapter in &self.adapters {
@@ -161,13 +191,21 @@ impl ClientManager {
                 }
             }
         }
-        let servers = source_servers.ok_or_else(|| "source client not found".to_string())?;
+        let mut servers_to_sync = source_servers.ok_or_else(|| "source client not found".to_string())?;
+        if let Some(names) = server_names {
+            servers_to_sync.retain(|s| names.contains(&s.name));
+        }
         for adapter in &self.adapters {
             if let Some(info) = adapter.detect() {
                 if target_ids.contains(&info.id) {
                     if let Some(path) = info.active_path {
+                        let p = PathBuf::from(path);
+                        let mut existing = adapter.read_servers(&p).map_err(|e| e.to_string())?;
+                        let sync_names: Vec<_> = servers_to_sync.iter().map(|s| s.name.clone()).collect();
+                        existing.retain(|s| !sync_names.contains(&s.name));
+                        existing.extend(servers_to_sync.clone());
                         adapter
-                            .write_servers(&PathBuf::from(path), &servers)
+                            .write_servers(&p, &existing)
                             .map_err(|e| e.to_string())?;
                     }
                 }

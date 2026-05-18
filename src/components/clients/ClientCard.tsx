@@ -1,13 +1,14 @@
-import React from 'react';
-import { Terminal, Code, MessageSquare, Monitor, Sparkles, SquareTerminal, RefreshCw, FileText, LucideIcon, Server as ServerIcon } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Terminal, Code, MessageSquare, Monitor, Sparkle, Sparkles, SquareTerminal, RefreshCw, FileText, LucideIcon, Server as ServerIcon } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { ClientInfo, McpServerConfig } from '../../types';
 import { Btn } from '../ui/Btn';
 import { Toggle } from '../ui/Toggle';
 
 interface ClientCardProps {
   client: ClientInfo;
-  allServers: McpServerConfig[];
-  onToggleServer: (serverId: string, enabled: boolean) => void;
+  refreshKey?: number;
+  onToggleServer: (clientId: string, serverName: string, enabled: boolean) => void;
   onSyncFrom: (client: ClientInfo) => void;
   onViewConfig: (client: ClientInfo) => void;
 }
@@ -17,19 +18,28 @@ const iconMap: Record<string, LucideIcon> = {
   code: Code,
   'message-square': MessageSquare,
   monitor: Monitor,
+  sparkle: Sparkle,
   sparkles: Sparkles,
   'square-terminal': SquareTerminal,
 };
 
 export const ClientCard: React.FC<ClientCardProps> = ({
   client,
-  allServers,
+  refreshKey,
   onToggleServer,
   onSyncFrom,
   onViewConfig,
 }) => {
   const Icon = iconMap[client.icon] || Terminal;
-  const configuredServers = allServers.filter((s) => client.servers.includes(s.id));
+  const [configuredServers, setConfiguredServers] = useState<McpServerConfig[]>([]);
+
+  const refreshServers = () => {
+    invoke<McpServerConfig[]>('get_client_servers', { clientId: client.id })
+      .then(setConfiguredServers)
+      .catch(() => setConfiguredServers([]));
+  };
+
+  useEffect(refreshServers, [client.id, refreshKey]);
 
   return (
     <div
@@ -139,7 +149,11 @@ export const ClientCard: React.FC<ClientCardProps> = ({
               </span>
               <Toggle
                 checked={server.enabled}
-                onChange={(checked) => onToggleServer(server.id, checked)}
+                onChange={async (checked) => {
+                  setConfiguredServers(prev => prev.map(s => s.name === server.name ? { ...s, enabled: checked } : s));
+                  await onToggleServer(client.id, server.name, checked);
+                  refreshServers();
+                }}
                 size="sm"
               />
             </div>

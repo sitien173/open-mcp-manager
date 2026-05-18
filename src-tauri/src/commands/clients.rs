@@ -5,7 +5,10 @@ use crate::models::{ClientInfo, McpServerConfig};
 
 #[tauri::command]
 pub fn detect_clients(client_manager: State<'_, Mutex<ClientManager>>) -> Result<Vec<ClientInfo>, String> {
-    Ok(client_manager.lock().map_err(|_| "client manager lock failed".to_string())?.detect_all().into_iter().map(|d| d.info).collect())
+    Ok(client_manager.lock().map_err(|_| "client manager lock failed".to_string())?.detect_all().into_iter().map(|mut d| {
+        d.info.servers = d.servers.iter().map(|s| s.name.clone()).collect();
+        d.info
+    }).collect())
 }
 
 #[tauri::command]

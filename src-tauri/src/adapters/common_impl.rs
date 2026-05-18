@@ -52,16 +52,52 @@ json_adapter!(RooCodeAdapter, "roo_code", "Roo Code", "code", "%APPDATA%/Code/Us
 json_adapter!(VsCodeCopilotAdapter, "vscode_copilot", "VS Code / Copilot", "sparkles", "%APPDATA%/Code/User/mcp.json", "servers", false);
 json_adapter!(CopilotCliAdapter, "copilot_cli", "GitHub Copilot CLI", "terminal", "~/.copilot/mcp-config.json", "mcpServers", false);
 json_adapter!(McpHubAdapter, "mcphub", "MCPHub", "plug", "~/.config/mcphub/servers.json", "mcpServers", false);
+pub struct GeminiCliAdapter;
+impl ClientAdapter for GeminiCliAdapter {
+    fn client_name(&self) -> &str { "Gemini CLI" }
+    fn detect(&self) -> Option<ClientInfo> {
+        let p = expand("~/.gemini/settings.json");
+        if !Path::new(&p).exists() { return None; }
+        Some(ClientInfo { id: "gemini_cli".into(), name: "Gemini CLI".into(), icon: "sparkle".into(), detected: true, config_paths: self.config_paths(), active_path: Some(p), servers: vec![] })
+    }
+    fn config_paths(&self) -> Vec<ConfigScope> { vec![default_scope(expand("~/.gemini/settings.json"), ConfigFormat::Json, "mcpServers")] }
+    fn read_servers(&self, path: &Path) -> Result<Vec<McpServerConfig>> {
+        if !path.exists() { return Ok(vec![]); }
+        parse_json_servers(&fs::read_to_string(path)?, "mcpServers")
+    }
+    fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> {
+        let content = if path.exists() { fs::read_to_string(path)? } else { "{}".to_string() };
+        let mut root: serde_json::Value = serde_json::from_str(&content)?;
+        let map = root.as_object_mut().ok_or_else(|| anyhow::anyhow!("invalid json"))?;
+        let server_map = crate::adapters::build_server_map(servers);
+        // Strip "disabled" key — Gemini CLI doesn't support it
+        let mut cleaned = serde_json::Map::new();
+        for (k, mut v) in server_map {
+            if let Some(obj) = v.as_object_mut() {
+                obj.remove("disabled");
+            }
+            cleaned.insert(k, v);
+        }
+        map.insert("mcpServers".into(), serde_json::Value::Object(cleaned));
+        if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
+        fs::write(path, serde_json::to_string_pretty(&root)?)?;
+        Ok(())
+    }
+    fn config_format(&self) -> ConfigFormat { ConfigFormat::Json }
+    fn root_key(&self) -> &str { "mcpServers" }
+    fn needs_cmd_wrapper(&self) -> bool { false }
+    fn supports_disabled_field(&self) -> bool { false }
+}
 
 pub struct ClaudeCodeAdapter;
 impl ClientAdapter for ClaudeCodeAdapter {
     fn client_name(&self) -> &str { "Claude Code" }
     fn detect(&self) -> Option<ClientInfo> {
-        let p = expand("~/.claude/settings.json");
+        let p = expand("~/.claude.json");
         if !Path::new(&p).exists() { return None; }
         Some(ClientInfo { id: "claude_code".into(), name: "Claude Code".into(), icon: "terminal".into(), detected: true, config_paths: self.config_paths(), active_path: Some(p), servers: vec![] })
     }
-    fn config_paths(&self) -> Vec<ConfigScope> { vec![default_scope(expand("~/.claude/settings.json"), ConfigFormat::Json, "mcpServers")] }
+    fn config_paths(&self) -> Vec<ConfigScope> { vec![default_scope(expand("~/.claude.json"), ConfigFormat::Json, "mcpServers")] }
     fn read_servers(&self, path: &Path) -> Result<Vec<McpServerConfig>> { if !path.exists(){return Ok(vec![])}; parse_json_servers(&fs::read_to_string(path)?, "mcpServers") }
     fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> {
         let mut adjusted = servers.to_vec();
@@ -139,6 +175,7 @@ impl ClientAdapter for CodexCliAdapter {
     fn config_format(&self) -> ConfigFormat { ConfigFormat::Toml }
     fn root_key(&self) -> &str { "mcp_servers" }
     fn needs_cmd_wrapper(&self) -> bool { false }
+    fn supports_disabled_field(&self) -> bool { false }
 }
 
 #[derive(Default)]

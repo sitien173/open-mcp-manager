@@ -13,4 +13,5 @@ pub trait ClientAdapter: Send + Sync {
     fn config_format(&self) -> ConfigFormat;
     fn root_key(&self) -> &str;
     fn needs_cmd_wrapper(&self) -> bool;
+    fn supports_disabled_field(&self) -> bool { true }
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useClientStore } from '../../stores/clientStore';
-import { useInstalledStore } from '../../stores/installedStore';
+import { invoke } from '@tauri-apps/api/core';
 import { ClientCard } from './ClientCard';
 import { Btn } from '../ui/Btn';
 import { AddClientModal } from '../modals/AddClientModal';
@@ -11,11 +11,18 @@ import { ClientInfo } from '../../types';
 
 export const ClientsView: React.FC = () => {
   const { clients } = useClientStore();
-  const { servers, toggleServer } = useInstalledStore();
+  const handleToggleServer = async (clientId: string, serverName: string, enabled: boolean) => {
+    try {
+      await invoke('toggle_server', { serverName, enabled, clientIds: [clientId] });
+    } catch (err) {
+      console.error('Failed to toggle server:', err);
+    }
+  };
 
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [syncSource, setSyncSource] = useState<ClientInfo | null>(null);
   const [configViewClient, setConfigViewClient] = useState<ClientInfo | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const detected = clients.filter((c) => c.detected).length;
   const total = clients.length;
@@ -77,8 +84,8 @@ export const ClientsView: React.FC = () => {
           <ClientCard
             key={client.id}
             client={client}
-            allServers={servers}
-            onToggleServer={toggleServer}
+            refreshKey={refreshKey}
+            onToggleServer={handleToggleServer}
             onSyncFrom={setSyncSource}
             onViewConfig={setConfigViewClient}
           />
@@ -93,7 +100,7 @@ export const ClientsView: React.FC = () => {
         <SyncDialog
           sourceClient={syncSource}
           clients={clients}
-          onClose={() => setSyncSource(null)}
+          onClose={() => { setSyncSource(null); setRefreshKey(k => k + 1); }}
         />
       )}
 
