@@ -118,6 +118,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
     fn config_format(&self) -> ConfigFormat { ConfigFormat::Json }
     fn root_key(&self) -> &str { "mcpServers" }
     fn needs_cmd_wrapper(&self) -> bool { true }
+    fn supports_disabled_field(&self) -> bool { false }
 }
 
 pub struct CodexCliAdapter;
