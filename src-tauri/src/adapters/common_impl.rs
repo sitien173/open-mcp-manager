@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::adapters::{default_scope, parse_json_servers, write_json_servers};
+use crate::adapters::{default_scope, parse_json_servers};
 use crate::adapters::traits::ClientAdapter;
 use crate::models::{ClientInfo, ConfigFormat, ConfigScope, McpServerConfig};
 
@@ -32,9 +32,7 @@ macro_rules! json_adapter {
                 parse_json_servers(&content, $root)
             }
             fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> {
-                let content = write_json_servers($root, servers)?;
-                if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
-                fs::write(path, content)?;
+                crate::adapters::merge_json_servers(path, $root, crate::adapters::build_server_map(servers))?;
                 Ok(())
             }
             fn config_format(&self) -> ConfigFormat { ConfigFormat::Json }
@@ -114,9 +112,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
                 }
             }
         }
-        let content = write_json_servers("mcpServers", &adjusted)?;
-        if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
-        fs::write(path, content)?;
+        crate::adapters::merge_json_servers(path, "mcpServers", crate::adapters::build_server_map(&adjusted))?;
         Ok(())
     }
     fn config_format(&self) -> ConfigFormat { ConfigFormat::Json }
@@ -148,7 +144,8 @@ impl ClientAdapter for CodexCliAdapter {
         Ok(out)
     }
     fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> {
-        let mut root = toml::value::Table::new();
+        let content = if path.exists() { fs::read_to_string(path)? } else { String::new() };
+        let mut root: toml::value::Table = if content.is_empty() { toml::value::Table::new() } else { toml::from_str(&content)? };
         let mut mcp = toml::value::Table::new();
         for s in servers {
             let mut t = toml::value::Table::new();
@@ -185,7 +182,7 @@ impl ClientAdapter for CustomAdapter {
     fn detect(&self) -> Option<ClientInfo> { None }
     fn config_paths(&self) -> Vec<ConfigScope> { vec![] }
     fn read_servers(&self, path: &Path) -> Result<Vec<McpServerConfig>> { if !path.exists(){return Ok(vec![])}; parse_json_servers(&fs::read_to_string(path)?, self.root_key()) }
-    fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> { fs::write(path, write_json_servers(self.root_key(), servers)?)?; Ok(()) }
+    fn write_servers(&self, path: &Path, servers: &[McpServerConfig]) -> Result<()> { crate::adapters::merge_json_servers(path, self.root_key(), crate::adapters::build_server_map(servers))?; Ok(()) }
     fn config_format(&self) -> ConfigFormat { ConfigFormat::Json }
     fn root_key(&self) -> &str { self.root_key_name.as_deref().unwrap_or("mcpServers") }
     fn needs_cmd_wrapper(&self) -> bool { false }

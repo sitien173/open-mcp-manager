@@ -221,10 +221,14 @@ pub fn parse_json_servers(content: &str, root_key: &str) -> anyhow::Result<Vec<M
     Ok(parse_server_map(servers_obj))
 }
 
-pub fn write_json_servers(root_key: &str, servers: &[McpServerConfig]) -> anyhow::Result<String> {
-    let mut root = Map::new();
-    root.insert(root_key.to_string(), Value::Object(build_server_map(servers)));
-    Ok(serde_json::to_string_pretty(&Value::Object(root))?)
+pub fn merge_json_servers(path: &std::path::Path, root_key: &str, server_map: Map<String, Value>) -> anyhow::Result<()> {
+    let content = if path.exists() { std::fs::read_to_string(path)? } else { "{}".to_string() };
+    let mut root: Value = serde_json::from_str(&content)?;
+    let map = root.as_object_mut().ok_or_else(|| anyhow::anyhow!("config is not a JSON object"))?;
+    map.insert(root_key.to_string(), Value::Object(server_map));
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+    std::fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
 }
 
 pub fn parse_server_map(servers_obj: Map<String, Value>) -> Vec<McpServerConfig> {
